@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}VenuePulseAI – Events Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .aspect-ratio-portrait {
+        aspect-ratio: 3 / 4;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    a.event-card-link:hover .aspect-ratio-portrait {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.5) !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header -->
+    <div class="mb-4 d-flex align-items-center justify-content-between">
+        <div>
+            <h2 class="fw-bold mb-1">Discover Events</h2>
+            <p class="text-secondary small mb-0">Explore what's happening around you</p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- ===== LEFT SIDEBAR: FILTERS ===== -->
+        <div class="col-lg-3 d-none d-lg-block">
+            <h5 class="fw-bold mb-3 fs-5">Filters</h5>
+            
+            <form id="filterForm" method="GET" action="{{ url_for('events_catalog') }}">
+                
+                <!-- Date Filter -->
+                <div class="card bg-transparent border-secondary border-opacity-25 mb-3 rounded-4 custom-shadow">
+                    <div class="card-header border-0 bg-transparent py-3 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#filterDate" style="cursor: pointer;">
+                        <span class="fw-semibold text-light"><i class="bi bi-calendar4 me-2 text-danger"></i>Date</span>
+                        <i class="bi bi-chevron-down small text-secondary"></i>
+                    </div>
+                    <div id="filterDate" class="collapse show">
+                        <div class="card-body pt-0 pb-3">
+                            <div class="d-flex flex-wrap gap-2">
+                                <input type="radio" class="btn-check filter-trigger" name="date" id="date1" value="today" {% if filters.get('date') == 'today' %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-secondary text-light rounded-pill px-3" for="date1">Today</label>
+                                
+                                <input type="radio" class="btn-check filter-trigger" name="date" id="date2" value="tomorrow" {% if filters.get('date') == 'tomorrow' %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-secondary text-light rounded-pill px-3" for="date2">Tomorrow</label>
+                                
+                                <input type="radio" class="btn-check filter-trigger" name="date" id="date3" value="weekend" {% if filters.get('date') == 'weekend' %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-secondary text-light rounded-pill px-3" for="date3">This Weekend</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Languages Filter (Visual Only - no DB mapping yet) -->
+                <div class="card bg-transparent border-secondary border-opacity-25 mb-3 rounded-4 custom-shadow">
+                    <div class="card-header border-0 bg-transparent py-3 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#filterLang" style="cursor: pointer;">
+                        <span class="fw-semibold text-light"><i class="bi bi-translate me-2 text-info"></i>Languages</span>
+                        <i class="bi bi-chevron-down small text-secondary"></i>
+                    </div>
+                    <div id="filterLang" class="collapse show">
+                        <div class="card-body pt-0 pb-3">
+                            <div class="d-flex flex-wrap gap-2">
+                                <input type="checkbox" class="btn-check" id="lng1" checked disabled><label class="btn btn-sm btn-outline-secondary text-light rounded-pill px-3 opacity-50" for="lng1">English</label>
+                                <input type="checkbox" class="btn-check" id="lng2" disabled><label class="btn btn-sm btn-outline-secondary text-light rounded-pill px-3 opacity-50" for="lng2">Hindi</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Categories Filter -->
+                <div class="card bg-transparent border-secondary border-opacity-25 mb-3 rounded-4 custom-shadow">
+                    <div class="card-header border-0 bg-transparent py-3 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#filterCat" style="cursor: pointer;">
+                        <span class="fw-semibold text-light"><i class="bi bi-grid-1x2 me-2 text-warning"></i>Categories</span>
+                        <i class="bi bi-chevron-down small text-secondary"></i>
+                    </div>
+                    <div id="filterCat" class="collapse show">
+                        <div class="card-body pt-0 pb-3">
+                            <div class="form-check text-secondary small mb-2 d-flex align-items-center gap-2">
+                                <input class="form-check-input bg-transparent border-secondary m-0 filter-trigger" type="checkbox" name="categories" value="Conference" id="cat1" {% if 'Conference' in filters.getlist('categories') %}checked{% endif %}>
+                                <label class="form-check-label text-light" for="cat1">Workshops</label>
+                            </div>
+                            <div class="form-check text-secondary small mb-2 d-flex align-items-center gap-2">
+                                <input class="form-check-input bg-transparent border-secondary m-0 filter-trigger" type="checkbox" name="categories" value="Comedy" id="cat2" {% if 'Comedy' in filters.getlist('categories') %}checked{% endif %}>
+                                <label class="form-check-label text-light" for="cat2">Comedy Shows</label>
+                            </div>
+                            <div class="form-check text-secondary small d-flex align-items-center gap-2">
+                                <input class="form-check-input bg-transparent border-secondary m-0 filter-trigger" type="checkbox" name="categories" value="Concert" id="cat3" {% if 'Concert' in filters.getlist('categories') %}checked{% endif %}>
+                                <label class="form-check-label text-light" for="cat3">Music Shows</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Price Filter -->
+                <div class="card bg-transparent border-secondary border-opacity-25 mb-3 rounded-4 custom-shadow">
+                    <div class="card-header border-0 bg-transparent py-3 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#filterPrice" style="cursor: pointer;">
+                        <span class="fw-semibold text-light"><i class="bi bi-tag me-2 text-success"></i>Price</span>
+                        <i class="bi bi-chevron-down small text-secondary"></i>
+                    </div>
+                    <div id="filterPrice" class="collapse show">
+                        <div class="card-body pt-0 pb-3">
+                            <div class="d-flex flex-wrap gap-2">
+                                <input type="radio" class="btn-check filter-trigger" name="price" id="p1" value="free" {% if filters.get('price') == 'free' %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-secondary text-secondary rounded-pill px-3" for="p1">Free</label>
+                                
+                                <input type="radio" class="btn-check filter-trigger" name="price" id="p2" value="0-5000" {% if filters.get('price') == '0-5000' %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-secondary text-secondary rounded-pill px-3" for="p2">Under ₹5K</label>
+                                
+                                <input type="radio" class="btn-check filter-trigger" name="price" id="p3" value="5000-15000" {% if filters.get('price') == '5000-15000' %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-secondary text-secondary rounded-pill px-3" for="p3">₹5K-₹15K</label>
+                                
+                                <input type="radio" class="btn-check filter-trigger" name="price" id="p4" value="above-15000" {% if filters.get('price') == 'above-15000' %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-secondary text-secondary rounded-pill px-3" for="p4">Above ₹15K</label>
+                            </div>
+                            
+                            <a href="{{ url_for('events_catalog') }}" class="btn btn-outline-danger btn-sm w-100 mt-3 rounded-pill bg-danger bg-opacity-10 border-0">Clear filters</a>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- ===== RIGHT MAIN AREA ===== -->
+        <div class="col-lg-9">
+            
+            <!-- Quick Category Pill Row -->
+            <div class="d-flex gap-2 mb-4 overflow-auto pb-2" style="white-space: nowrap; scrollbar-width: none;">
+                <a href="{{ url_for('events_catalog') }}" class="btn rounded-pill {% if not request.args.get('event_type') %}bg-danger text-light border-0{% else %}btn-outline-secondary text-light{% endif %} px-4 fw-medium">All</a>
+                <a href="{{ url_for('events_catalog', event_type='Conference') }}" class="btn rounded-pill btn-outline-secondary text-light px-4 fw-medium">Workshops</a>
+                <a href="{{ url_for('events_catalog', event_type='Comedy') }}" class="btn rounded-pill btn-outline-secondary text-light px-4 fw-medium">Comedy Shows</a>
+                <a href="{{ url_for('events_catalog', event_type='Concert') }}" class="btn rounded-pill btn-outline-secondary text-light px-4 fw-medium">Music Shows</a>
+                <a href="{{ url_for('events_catalog', event_type='Sports') }}" class="btn rounded-pill btn-outline-secondary text-light px-4 fw-medium">Sports</a>
+            </div>
+
+            <!-- Portrait Event Grid -->
+            {% if events %}
+            <div class="row row-cols-2 row-cols-md-3 row-cols-xl-4 g-4 w-100 m-0">
+                {% for event in events %}
+                <div class="col p-1 px-md-2 pb-md-4">
+                    <a href="{{ url_for('event_details', event_id=event.id) }}" class="text-decoration-none event-card-link">
+                        <div class="card h-100 border-0 bg-transparent animate-fade-up delay-{{ loop.index0 % 4 * 100 }}">
+                            
+                            <!-- Placeholder Image Wrapper -->
+                            <div class="position-relative bg-dark rounded-4 overflow-hidden mb-3 aspect-ratio-portrait shadow">
+                                <!-- AI generated gradient as a placeholder image -->
+                                <div class="w-100 h-100" style="background: linear-gradient(135deg, {% if loop.index0 % 2 == 0 %}var(--vp-primary), #6366f1{% else %}var(--vp-accent), #ec4899{% endif %}); opacity: 0.9;"></div>
+                                
+                                <!-- Dark overlay at bottom for date -->
+                                <div class="position-absolute bottom-0 w-100 py-2 px-3 fw-bold text-light small" style="background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.6), transparent);">
+                                    {{ event.date.strftime('%a, %d %b') }} onwards
+                                </div>
+                            </div>
+
+                            <!-- Card Body (Text Below Image) -->
+                            <div class="px-1">
+                                <h6 class="fw-bold text-light text-truncate mb-1" style="font-size: 1.05rem;">{{ event.name }}</h6>
+                                <p class="text-secondary small mb-1 text-truncate">Main Stage, VenuePulse</p>
+                                <p class="text-secondary small mb-2 text-truncate" style="opacity:0.65;">{{ event.genre }} / {{ event.event_type }}</p>
+                                
+                                <!-- In INR as requested -->
+                                <div class="fw-semibold text-light mt-2" style="font-size: 0.95rem;">
+                                    ₹{{ "%.0f"|format(event.base_ticket_price * 83) }} onwards
+                                </div>
+                            </div>
+                            
+                        </div>
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="vp-empty-state text-center py-5 mt-4 border border-secondary border-opacity-25 rounded-4" style="background: rgba(0,0,0,0.2)">
+                <i class="bi bi-search display-3 text-secondary mb-3 d-block opacity-50"></i>
+                <h4 class="text-light">No events found</h4>
+                <p class="text-secondary">Try adjusting your filters or browsing all categories.</p>
+                <a href="{{ url_for('events_catalog') }}" class="btn btn-outline-danger rounded-pill mt-2">Clear Filters</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.filter-trigger').forEach(function(el) {
+        el.addEventListener('change', function() {
+            document.getElementById('filterForm').submit();
+        });
+    });
+});
+</script>
+{% endblock %}

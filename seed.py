@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import random
 from app import app, db
-from models import Event, Ticket, ConcessionSale, StaffShift
+from models import Event, Ticket, ConcessionSale, StaffShift, User, Booking, HelpdeskTicket
 
 def seed_data():
     with app.app_context():
@@ -15,16 +15,16 @@ def seed_data():
         now = datetime.now(timezone.utc)
         
         events_data = [
-            ("Neon Nights Cyberpunk Rave", now + timedelta(days=2), "Electronic", 800, 45.0),
-            ("Symphony Under the Stars", now + timedelta(days=5), "Classical", 1200, 75.0),
-            ("Indie Rock Showcase", now + timedelta(days=10), "Rock", 400, 30.0),
-            ("Jazz & Blues Revival", now + timedelta(days=14), "Jazz", 250, 55.0),
-            ("Global EDM Festival pre-party", now + timedelta(days=20), "Electronic", 1500, 65.0),
+            ("Neon Nights Cyberpunk Rave", now + timedelta(days=2), "Electronic", "Concert", 800, 45.0),
+            ("Symphony Under the Stars", now + timedelta(days=5), "Classical", "Concert", 1200, 75.0),
+            ("Indie Rock Showcase", now + timedelta(days=10), "Rock", "Concert", 400, 30.0),
+            ("Jazz & Blues Revival", now + timedelta(days=14), "Jazz", "Concert", 250, 55.0),
+            ("Global EDM Festival pre-party", now + timedelta(days=20), "Electronic", "Concert", 1500, 65.0),
         ]
         
         events = []
-        for name, date, genre, capacity, price in events_data:
-            event = Event(name=name, date=date, genre=genre, capacity=capacity, base_ticket_price=price)
+        for name, date, genre, event_type, capacity, price in events_data:
+            event = Event(name=name, date=date, genre=genre, event_type=event_type, capacity=capacity, base_ticket_price=price)
             db.session.add(event)
             events.append(event)
             

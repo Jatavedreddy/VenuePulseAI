@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}VenuePulseAI – {{ event.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .event-banner {
+        height: 480px;
+        background: linear-gradient(135deg, rgba(0,0,0,0.6), rgba(0,0,0,0.9)), linear-gradient(45deg, var(--vp-primary), #6366f1);
+        background-size: cover;
+        background-position: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        position: relative;
+    }
+    
+    @media (max-width: 768px) {
+        .event-banner {
+            height: 350px;
+        }
+    }
+    
+    .sticky-booking-card {
+        position: sticky;
+        top: 6rem;
+    }
+    
+    .vp-icon-list-circle i {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.05);
+        font-size: 1.1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 1. Top Event Banner -->
+<div class="event-banner px-4 px-md-5 pb-5 w-100">
+    <div class="container p-0 animate-fade-up">
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="badge bg-danger text-light px-3 py-2 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-music-note-list me-1"></i>{{ event.genre }}</span>
+            <span class="badge bg-white bg-opacity-10 text-light px-3 py-2 rounded-pill border border-white border-opacity-25" style="font-size: 0.85rem;">{{ event.event_type }}</span>
+        </div>
+        <h1 class="display-3 fw-bold text-white mb-2" style="text-shadow: 0 4px 15px rgba(0,0,0,0.5);">{{ event.name }}</h1>
+        <p class="lead text-light mb-0 fw-medium" style="opacity: 0.9;">Join us for an unforgettable experience</p>
+    </div>
+</div>
+
+<!-- 2. Main Layout -->
+<div class="container py-5 mt-2">
+    <div class="row g-5">
+        <!-- 3. Left Content Column -->
+        <div class="col-lg-8 animate-fade-up delay-100">
+            
+            <div class="d-flex align-items-center mb-5 gap-3">
+                <a href="{{ url_for('events_catalog') }}" class="btn btn-outline-secondary rounded-pill px-4 text-light"><i class="bi bi-arrow-left me-2"></i>Back to Catalog</a>
+            </div>
+            
+            <!-- About Section -->
+            <div class="mb-5">
+                <h3 class="fw-bold mb-4 border-bottom border-secondary border-opacity-25 pb-3">About The Event</h3>
+                <p class="text-secondary mb-3" style="line-height: 1.8; font-size: 1.05rem;">
+                    Welcome to the premiere of <strong class="text-light">{{ event.name }}</strong>, bringing together the absolute best in {{ event.genre }} for an unparalleled evening at our Main Stage. As part of our {{ event.event_type }} series, this highly anticipated event is guaranteed to keep you fully immersed from start to finish.
+                </p>
+                <p class="text-secondary mb-0" style="line-height: 1.8; font-size: 1.05rem;">
+                    Secure your place now to witness breathtaking performances, engage with leading figures, and make memories that will last a lifetime. VenuePulse goes above and beyond to provide top-tier production quality, phenomenal acoustics, and an atmosphere built entirely around your enjoyment. Don't miss out on what is shaping up to be the event of the year!
+                </p>
+            </div>
+
+            <!-- Artists/Speakers Section -->
+            <div class="mb-5">
+                <h3 class="fw-bold mb-4 border-bottom border-secondary border-opacity-25 pb-3">Artists & Panelists</h3>
+                <div class="d-flex flex-wrap gap-4 mt-4">
+                    <!-- Placeholder Profile 1 -->
+                    <div class="text-center" style="width: 100px;">
+                        <div class="rounded-circle shadow mx-auto mb-3" style="width: 80px; height: 80px; background-image: linear-gradient(120deg, #a1c4fd 0%, #c2e9fb 100%);"></div>
+                        <h6 class="fw-semibold text-light mb-0 small">Alex Rivera</h6>
+                        <small class="text-secondary" style="font-size: 0.75rem;">Lead Act</small>
+                    </div>
+                    <!-- Placeholder Profile 2 -->
+                    <div class="text-center" style="width: 100px;">
+                        <div class="rounded-circle shadow mx-auto mb-3" style="width: 80px; height: 80px; background-image: linear-gradient(120deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);"></div>
+                        <h6 class="fw-semibold text-light mb-0 small">Sarah Chen</h6>
+                        <small class="text-secondary" style="font-size: 0.75rem;">Guest Star</small>
+                    </div>
+                    <!-- Placeholder Profile 3 -->
+                    <div class="text-center" style="width: 100px;">
+                        <div class="rounded-circle shadow mx-auto mb-3" style="width: 80px; height: 80px; background-image: linear-gradient(120deg, #fccb90 0%, #d57eeb 100%);"></div>
+                        <h6 class="fw-semibold text-light mb-0 small">Max JD</h6>
+                        <small class="text-secondary" style="font-size: 0.75rem;">Support</small>
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="border-secondary border-opacity-25 my-5">
+            
+            <h5 class="text-light fw-bold mb-3">Terms & Conditions</h5>
+            <ul class="text-secondary small" style="line-height: 1.8;">
+                <li>Please carry a valid ID proof along with you.</li>
+                <li>No refunds on purchased ticket are possible, even in case of any rescheduling.</li>
+                <li>Security procedures, including frisking remain the right of the management.</li>
+                <li>No dangerous or potentially hazardous objects including but not limited to weapons, knives, guns, fireworks, helmets, lazer devices, bottles, musical instruments will be allowed in the venue.</li>
+                <li>VenuePulse is not responsible for any injury or damage occurring due to the event.</li>
+            </ul>
+        </div>
+
+        <!-- 4. Right Sticky Card Column -->
+        <div class="col-lg-4">
+            <div class="card bg-transparent border border-secondary border-opacity-25 shadow-lg rounded-4 overflow-hidden sticky-booking-card animate-fade-left delay-200">
+                <div class="card-body p-4 pt-5" style="background: rgba(255,255,255,0.02); backdrop-filter: blur(10px);">
+                    
+                    <!-- Meta List -->
+                    <ul class="list-unstyled mb-4 vp-icon-list-circle">
+                        <li class="d-flex align-items-center gap-3 mb-4">
+                            <i class="bi bi-calendar3 text-danger"></i>
+                            <div>
+                                <h6 class="fw-semibold mb-0" style="font-size:0.9rem;">Date</h6>
+                                <p class="text-light fw-medium mb-0">{{ event.date.strftime('%A, %d %b %Y') }}</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-center gap-3 mb-4">
+                            <i class="bi bi-clock text-info"></i>
+                            <div>
+                                <h6 class="fw-semibold mb-0" style="font-size:0.9rem;">Time</h6>
+                                <p class="text-light fw-medium mb-0">{{ event.date.strftime('%I:%M %p') }} onwards</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-center gap-3 mb-4">
+                            <i class="bi bi-hourglass-split text-warning"></i>
+                            <div>
+                                <h6 class="fw-semibold mb-0" style="font-size:0.9rem;">Duration</h6>
+                                <p class="text-light fw-medium mb-0">2hrs 30mins</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-center gap-3 mb-4">
+                            <i class="bi bi-geo-alt-fill text-primary"></i>
+                            <div>
+                                <h6 class="fw-semibold mb-0" style="font-size:0.9rem;">Venue</h6>
+                                <p class="text-light fw-medium mb-0">Main Stage, VP Center</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-center gap-3 mb-4">
+                            <i class="bi bi-translate text-success"></i>
+                            <div>
+                                <h6 class="fw-semibold mb-0" style="font-size:0.9rem;">Language</h6>
+                                <p class="text-light fw-medium mb-0">English, Hindi</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-center gap-3">
+                            <i class="bi bi-person-check text-light"></i>
+                            <div>
+                                <h6 class="fw-semibold mb-0" style="font-size:0.9rem;">Age Limit</h6>
+                                <p class="text-light fw-medium mb-0">16+ Preferred</p>
+                            </div>
+                        </li>
+                    </ul>
+
+                    <hr class="border-secondary border-opacity-25 my-4">
+
+                    <!-- Pricing & CTA -->
+                    <div class="mb-4 text-center">
+                        <span class="text-secondary small text-uppercase fw-semibold tracking-wide">General Admission</span>
+                        <h2 class="fw-bold text-white mb-0 display-5 mt-1">₹{{ "%.0f"|format(event.base_ticket_price * 83) }}</h2>
+                        <span class="badge bg-success bg-opacity-10 text-success mt-2 rounded-pill px-3">Available Now</span>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('book_event', event_id=event.id) }}">
+                        <button type="submit" class="btn vp-btn-primary w-100 py-3 fw-bold fs-5 rounded-pill shadow-lg" style="transition: transform 0.2s;">
+                            Book Now
+                        </button>
+                    </form>
+                    
+                    <p class="text-center text-secondary small mt-3 mb-0" style="font-size: 0.75rem;">
+                        <i class="bi bi-shield-lock-fill me-1 text-success"></i>Transactions are securely processed.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

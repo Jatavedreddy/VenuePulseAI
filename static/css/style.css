@@ -12,19 +12,20 @@
     --vp-surface-2: rgba(39, 39, 42, 0.6); /* Zinc 800 w/ opacity */
     --vp-surface-hover: rgba(63, 63, 70, 0.8);
     
-    /* Vibrant Gradients */
-    --vp-primary: #8b5cf6; /* Violet 500 */
-    --vp-primary-light: #c084fc; /* Fuchsia 400 */
-    --vp-accent: #38bdf8; /* Sky 400 */
-    --vp-accent-dim: rgba(56, 189, 248, 0.15);
+    /* Vibrant Gradients - High-End Crimson & Amber */
+    --vp-primary: #e63946; /* Crimson */
+    --vp-primary-light: #ef233c; 
+    --vp-primary-hover: #d90429;
+    --vp-accent: #f48c06; /* Amber */
+    --vp-accent-dim: rgba(244, 140, 6, 0.15);
     --vp-warning: #fbbf24; /* Amber 400 */
     --vp-success: #34d399; /* Emerald 400 */
     
     /* Borders & Shadows */
     --vp-border: rgba(255, 255, 255, 0.08); /* Subtle glass border */
     --vp-border-bright: rgba(255, 255, 255, 0.15);
-    --vp-glow-primary: 0 0 40px -10px rgba(139, 92, 246, 0.3);
-    --vp-glow-accent: 0 0 40px -10px rgba(56, 189, 248, 0.3);
+    --vp-glow-primary: 0 0 40px -10px rgba(230, 57, 70, 0.3);
+    --vp-glow-accent: 0 0 40px -10px rgba(244, 140, 6, 0.3);
     
     /* Typography */
     --vp-text: #f4f4f5; /* Zinc 100 */
@@ -72,7 +73,7 @@ h1, h2, h3, h4, h5, h6, .vp-brand {
     position: fixed;
     border-radius: 50%;
     filter: blur(90px);
-    opacity: 0.95;
+    opacity: 0.85; /* Increased to counteract the severe blur diffusion */
     z-index: -1;
     pointer-events: none;
     animation: drift 10s infinite alternate ease-in-out;
@@ -172,7 +173,7 @@ h1, h2, h3, h4, h5, h6, .vp-brand {
     transform: translateX(-50%);
     width: 60vw;
     height: 400px;
-    background: radial-gradient(ellipse 50% 50% at 50% 0%, rgba(139, 92, 246, 0.15) 0%, transparent 100%);
+    background: radial-gradient(ellipse 50% 50% at 50% 0%, rgba(230, 57, 70, 0.15) 0%, transparent 100%);
     pointer-events: none;
     z-index: -1;
 }

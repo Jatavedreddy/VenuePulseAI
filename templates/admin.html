@@ -203,6 +203,61 @@
         </div>
     </div>
 
+    <!-- ===== Helpdesk & Support Queue ===== -->
+    <div class="card vp-panel border-0 animate-fade-up delay-400 mb-5">
+        <div class="card-header vp-panel__header d-flex align-items-center justify-content-between">
+            <h5 class="fw-bold mb-0">
+                <i class="bi bi-headset me-2 text-danger"></i>Helpdesk & Support Queue
+            </h5>
+            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">{{ open_tickets | length }} Open</span>
+        </div>
+        <div class="card-body p-0">
+            {% if open_tickets %}
+            <div class="table-responsive">
+                <table class="table table-dark table-hover vp-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Subject</th>
+                            <th>User</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ticket in open_tickets %}
+                        <tr>
+                            <td class="text-secondary">#{{ ticket.id }}</td>
+                            <td class="fw-semibold">{{ ticket.subject }}</td>
+                            <td>
+                                <i class="bi bi-person me-1 text-secondary"></i>{{ ticket.user.name }}
+                            </td>
+                            <td>{{ ticket.created_at.strftime('%b %d, %Y %H:%M') }}</td>
+                            <td>
+                                <span class="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50">
+                                    {{ ticket.status | capitalize }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <a href="#" class="btn btn-sm btn-outline-success vp-btn-sm" title="Resolve Ticket">
+                                    <i class="bi bi-check2-circle me-1"></i>Resolve
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-check-circle display-4 text-success mb-3 d-block opacity-50"></i>
+                <p class="text-secondary">All caught up! No open support tickets right now.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
     <!-- ===== Upcoming Events Table ===== -->
     <div class="card vp-panel border-0 animate-fade-up delay-400">
         <div class="card-header vp-panel__header d-flex align-items-center justify-content-between">

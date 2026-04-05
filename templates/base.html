@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- App Stylesheet -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2.0">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -37,17 +37,49 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="mainNav">
-                <ul class="navbar-nav ms-auto gap-1">
+                <ul class="navbar-nav ms-auto gap-2 align-items-lg-center">
                     <li class="nav-item">
                         <a class="nav-link vp-nav-link" href="{{ url_for('index') }}">
-                            <i class="bi bi-music-note-list me-1"></i>Home (Patron)
+                            <i class="bi bi-music-note-list me-1"></i>Home
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link vp-nav-link" href="{{ url_for('admin_dashboard') }}">
-                            <i class="bi bi-speedometer2 me-1"></i>Admin Dashboard
-                        </a>
-                    </li>
+
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <a class="nav-link vp-nav-link" href="{{ url_for('support_submit') }}">
+                                <i class="bi bi-headset me-1"></i>Contact Support
+                            </a>
+                        </li>
+                        
+                        <!-- Admin Only -->
+                        {% if current_user.role == 'admin' %}
+                        <li class="nav-item">
+                            <a class="nav-link vp-nav-link" href="{{ url_for('admin_dashboard') }}">
+                                <i class="bi bi-speedometer2 me-1"></i>Admin Dashboard
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        <!-- User Profile / Logout -->
+                        <li class="nav-item ms-lg-3 d-flex align-items-center gap-3">
+                            <span class="text-secondary small">
+                                Welcome, <strong class="text-white">{{ current_user.name }}</strong>
+                            </span>
+                            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger" style="border-radius: 999px;">
+                                <i class="bi bi-box-arrow-right me-1"></i>Logout
+                            </a>
+                        </li>
+                    {% else %}
+                        <!-- Unauthenticated -->
+                        <li class="nav-item ms-lg-3 d-flex align-items-center gap-2">
+                            <a href="{{ url_for('login') }}" class="btn btn-sm text-light px-3" style="font-weight: 500;">
+                                Login
+                            </a>
+                            <a href="{{ url_for('register') }}" class="btn btn-sm vp-btn-primary px-4 shadow-sm" style="border-radius: 999px;">
+                                Register
+                            </a>
+                        </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>

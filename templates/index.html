@@ -7,8 +7,19 @@
 <!-- ===== Hero Section ===== -->
 <section class="vp-hero text-center">
     <div class="container">
+        {% if current_user.is_authenticated and current_user.role != 'admin' %}
         <div class="vp-hero__badge mb-3 animate-fade-up">
-            <i class="bi bi-stars me-1"></i> AI-Powered Venue Management
+            <i class="bi bi-stars me-2 text-warning"></i>Welcome Back, {{ current_user.name }}
+        </div>
+        <h1 class="vp-hero__title display-4 fw-bold mb-3 animate-fade-up delay-100">
+            Discover Your Next <span class="vp-gradient-text">Unforgettable Experience</span>
+        </h1>
+        <p class="vp-hero__subtitle lead text-secondary mx-auto mb-4 animate-fade-up delay-200" style="max-width:600px;">
+            Explore top-tier concerts, elite workshops, and comedy shows curated exclusively for you.
+        </p>
+        {% else %}
+        <div class="vp-hero__badge mb-3 animate-fade-up">
+            <i class="bi bi-robot me-1"></i> AI-Powered Venue Management
         </div>
         <h1 class="vp-hero__title display-4 fw-bold mb-3 animate-fade-up delay-100">
             Discover <span class="vp-gradient-text">Live Events</span><br>Near You
@@ -16,27 +27,49 @@
         <p class="vp-hero__subtitle lead text-secondary mx-auto mb-4 animate-fade-up delay-200" style="max-width:600px;">
             Real-time dynamic pricing, personalized recommendations, and seamless ticketing — all in one place.
         </p>
+        {% endif %}
         <div class="d-flex justify-content-center gap-3 flex-wrap animate-fade-up delay-300">
-            <a href="#events" class="btn btn-primary btn-lg vp-btn-primary px-4">
+            <a href="{{ url_for('events_catalog') }}" class="btn btn-primary btn-lg vp-btn-primary px-4">
                 <i class="bi bi-ticket-perforated me-2"></i>Browse Events
             </a>
+            {% if current_user.is_authenticated and current_user.role == 'admin' %}
             <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-light btn-lg px-4">
                 <i class="bi bi-speedometer2 me-2"></i>Admin Panel
             </a>
+            {% endif %}
         </div>
     </div>
 </section>
 
 <!-- ===== Upcoming Events Grid ===== -->
 <section id="events" class="container py-5 animate-fade-up delay-100">
-    <div class="d-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
         <div>
             <h2 class="fw-bold mb-1">Upcoming Events</h2>
             <p class="text-secondary mb-0">Grab your tickets before they sell out</p>
         </div>
-        <span class="badge vp-badge-glow fs-6">
-            <i class="bi bi-calendar-event me-1"></i>{{ events | length }} event{{ 's' if events | length != 1 }}
-        </span>
+        <div class="d-flex align-items-center gap-3">
+            <div class="dropdown">
+                <button class="btn btn-outline-light dropdown-toggle" style="border-radius: 999px; font-size: 0.9rem;" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-funnel me-1"></i> 
+                    {% if request.args.get('event_type') %}
+                        {{ request.args.get('event_type') }}
+                    {% else %}
+                        All Events
+                    {% endif %}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-dark shadow">
+                    <li><a class="dropdown-item" href="{{ url_for('index') }}">All Events</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="{{ url_for('index', event_type='Concert') }}">Concerts</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('index', event_type='Conference') }}">Conferences</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('index', event_type='Sports') }}">Sports</a></li>
+                </ul>
+            </div>
+            <span class="badge vp-badge-glow fs-6">
+                <i class="bi bi-calendar-event me-1"></i>{{ events | length }} event{{ 's' if events | length != 1 }}
+            </span>
+        </div>
     </div>
 
     {% if events %}
@@ -48,7 +81,13 @@
                 <div class="vp-event-card__accent"></div>
                 <div class="card-body d-flex flex-column p-4">
                     <div class="d-flex align-items-start justify-content-between mb-3">
-                        <span class="badge vp-badge-genre">{{ event.genre }}</span>
+                        <div>
+                            <span class="badge vp-badge-genre me-1">{{ event.genre }}</span>
+                            <!-- Event Type Badge -->
+                            <span class="badge bg-dark border border-secondary border-opacity-50 text-light fw-normal" style="font-size: 0.75rem;">
+                                {{ event.event_type }}
+                            </span>
+                        </div>
                         <span class="text-secondary small">
                             <i class="bi bi-people-fill me-1"></i>{{ event.capacity }}
                         </span>
@@ -61,14 +100,19 @@
                         <i class="bi bi-clock me-1"></i>
                         {{ event.date.strftime('%I:%M %p') }}
                     </p>
-                    <div class="mt-auto d-flex align-items-center justify-content-between">
-                        <div>
+                    <div class="mt-auto">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
                             <span class="text-secondary small">From</span>
                             <span class="fs-4 fw-bold vp-gradient-text">${{ "%.2f"|format(event.base_ticket_price) }}</span>
                         </div>
-                        <button class="btn btn-sm vp-btn-primary px-3">
-                            <i class="bi bi-bag-plus me-1"></i>Get Tickets
-                        </button>
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('event_details', event_id=event.id) }}" class="btn btn-sm vp-btn-primary flex-grow-1">
+                                <i class="bi bi-ticket-perforated me-1"></i>Book Event
+                            </a>
+                            <a href="{{ url_for('event_calendar', event_id=event.id) }}" class="btn btn-sm btn-outline-light" title="Add to Calendar">
+                                <i class="bi bi-calendar-plus"></i>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
