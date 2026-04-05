@@ -6,17 +6,27 @@ Flask-WTF==1.2.2
 Flask-Login==0.6.3
 
 # Environment & Configuration
-python-dotenv==1.1.0
+python-dotenv==1.1.1
 
 # Data Processing
 pandas==2.2.3
+joblib==1.5.3
+scikit-learn==1.8.0
 
 # Database
 SQLAlchemy==2.0.40
 
 # HTTP & API
 requests==2.32.3
+groq==0.37.1
+httpx==0.27.2
+langchain-groq==1.1.2
+
+# AI Agents
+crewai==1.9.3
+litellm==1.60.2
 
 # Utilities
 gunicorn==23.0.0
 email-validator==2.2.0
+Markdown==3.7

@@ -171,6 +171,37 @@
                 </div>
                 {% endfor %}
             </div>
+
+            {% if pagination.total_pages > 1 %}
+            <nav aria-label="Events pagination" class="mt-4 d-flex justify-content-center">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                        <a
+                            class="page-link bg-dark text-secondary border-secondary border-opacity-25"
+                            href="{{ url_for('events_catalog', event_type=filters.get('event_type'), date=filters.get('date'), price=filters.get('price'), categories=filters.getlist('categories'), page=pagination.prev_page) if pagination.has_prev else '#' }}"
+                            aria-disabled="{{ 'true' if not pagination.has_prev else 'false' }}"
+                        >
+                            <i class="bi bi-chevron-left"></i> Prev
+                        </a>
+                    </li>
+
+                    <li class="page-item disabled">
+                        <span class="page-link text-white border-secondary border-opacity-25" style="background: rgba(255,255,255,0.05);">
+                            Page {{ pagination.page }} of {{ pagination.total_pages }}
+                        </span>
+                    </li>
+
+                    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                        <a
+                            class="page-link bg-dark text-secondary border-secondary border-opacity-25"
+                            href="{{ url_for('events_catalog', event_type=filters.get('event_type'), date=filters.get('date'), price=filters.get('price'), categories=filters.getlist('categories'), page=pagination.next_page) if pagination.has_next else '#' }}"
+                        >
+                            Next <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            {% endif %}
             {% else %}
             <div class="vp-empty-state text-center py-5 mt-4 border border-secondary border-opacity-25 rounded-4" style="background: rgba(0,0,0,0.2)">
                 <i class="bi bi-search display-3 text-secondary mb-3 d-block opacity-50"></i>

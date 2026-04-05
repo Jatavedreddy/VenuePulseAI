@@ -19,7 +19,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2.0">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body
+    data-authenticated="{{ 'true' if current_user.is_authenticated else 'false' }}"
+    data-user-id="{{ current_user.id if current_user.is_authenticated else '' }}"
+>
 
     <!-- ===== Ambient Background ===== -->
     <div class="ambient-blob ambient-blob--1"></div>
@@ -71,7 +74,7 @@
                                     <i class="bi bi-ticket-detailed me-1"></i>My Tickets
                                 </a>
                                 {% endif %}
-                                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger px-3 text-danger" style="border-radius: 999px;">
+                                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger px-3 text-danger" style="border-radius: 999px;" data-logout-link="true">
                                     <i class="bi bi-box-arrow-right d-xl-none"></i>
                                     <span class="d-none d-xl-inline"><i class="bi bi-box-arrow-right me-1"></i>Logout</span>
                                 </a>
@@ -111,6 +114,42 @@
     <main>
         {% block content %}{% endblock %}
     </main>
+
+    {% if current_user.is_authenticated and current_user.role != 'admin' %}
+    <!-- ===== Global Chat Widget (Non-Admin) ===== -->
+    <button class="vp-chat-fab" id="chatFab" title="Chat with VenuePulseAI">
+        <i class="bi bi-chat-dots-fill fs-4"></i>
+    </button>
+
+    <div class="vp-chat-popover" id="chatPopover">
+        <div class="vp-chat-popover__header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-robot fs-5"></i>
+                <strong>VenuePulse AI</strong>
+            </div>
+            <button class="btn btn-sm btn-link text-white p-0" id="chatClose" type="button" aria-label="Close chat">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="vp-chat-popover__body" id="chatMessages">
+            <div class="vp-chat-bubble vp-chat-bubble--bot">
+                Hi! I'm your VenuePulseAI assistant.<br>
+                <span class="text-white-50 small">Ask me about upcoming events and pricing.</span>
+            </div>
+        </div>
+        <div class="vp-chat-popover__footer">
+            <input
+                type="text"
+                class="form-control form-control-sm vp-chat-input"
+                id="chatInput"
+                placeholder="Ask me anything..."
+            >
+            <button class="btn btn-sm vp-btn-primary" id="chatSendBtn" type="button" aria-label="Send message">
+                <i class="bi bi-send-fill"></i>
+            </button>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- ===== Footer ===== -->
     <footer class="vp-footer mt-auto">

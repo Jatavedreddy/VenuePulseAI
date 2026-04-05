@@ -3,6 +3,7 @@
 import os
 from datetime import datetime, timezone
 import math
+import markdown
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -21,6 +22,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # db is defined in models.py; bind it to this app
 from models import db, Event, Ticket, ConcessionSale, StaffShift, User, Booking, HelpdeskTicket  # noqa: E402
+from ai_crew import run_event_health_crew, run_support_triage_crew  # noqa: E402
 db.init_app(app)
 
 # Setup Flask-Login
@@ -139,6 +141,8 @@ def index():
 def events_catalog():
     """Logged in user events catalog."""
     from datetime import datetime, timedelta
+    page = request.args.get('page', 1, type=int)
+    per_page = 12
     
     query = Event.query.filter(Event.date >= datetime.now())
     
@@ -180,8 +184,32 @@ def events_catalog():
             events = [e for e in events if start_tmrw <= e.date <= end_tmrw]
         elif date_filter == "weekend":
             events = [e for e in events if e.date.weekday() in (5, 6)]
-        
-    return render_template("events_catalog.html", events=events, filters=request.args)
+
+    total_events = len(events)
+    total_pages = max(1, math.ceil(total_events / per_page))
+    page = max(1, min(page, total_pages))
+
+    start_index = (page - 1) * per_page
+    end_index = start_index + per_page
+    paged_events = events[start_index:end_index]
+
+    pagination = {
+        "page": page,
+        "per_page": per_page,
+        "total": total_events,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+    }
+
+    return render_template(
+        "events_catalog.html",
+        events=paged_events,
+        filters=request.args,
+        pagination=pagination,
+    )
 
 @app.route("/my-tickets")
 @login_required
@@ -299,6 +327,10 @@ def admin_dashboard():
         
     total_events = Event.query.count()
     total_tickets_sold = Ticket.query.filter_by(is_sold=True).count()
+    total_sales = (
+        db.session.query(db.func.coalesce(db.func.sum(Booking.total_amount), 0))
+        .scalar()
+    ) or 0
     total_concession_revenue = (
         db.session.query(db.func.coalesce(db.func.sum(ConcessionSale.price), 0))
         .scalar()
@@ -309,19 +341,41 @@ def admin_dashboard():
         Event.date >= datetime.now(timezone.utc)
     ).order_by(Event.date.asc()).limit(5).all()
 
-    # Fetch open helpdesk tickets
-    open_tickets = HelpdeskTicket.query.filter_by(status="open").all()
+    # Fetch open helpdesk tickets (case-insensitive to support both 'open' and 'Open').
+    open_tickets = HelpdeskTicket.query.filter(
+        db.func.lower(HelpdeskTicket.status) == "open"
+    ).all()
+    open_tickets_count = HelpdeskTicket.query.filter(
+        db.func.lower(HelpdeskTicket.status) == "open"
+    ).count()
 
     return render_template(
         "admin.html",
         total_events=total_events,
         total_tickets_sold=total_tickets_sold,
+        total_sales=total_sales,
         total_concession_revenue=total_concession_revenue,
         recent_events=recent_events,
         all_events=all_events,
         upcoming_events=upcoming_events,
-        open_tickets=open_tickets
+        open_tickets=open_tickets,
+        open_tickets_count=open_tickets_count,
     )
+
+
+@app.route('/admin/resolve-ticket/<int:ticket_id>', methods=['POST'])
+@login_required
+def admin_resolve_ticket(ticket_id):
+    """Admin-only endpoint to manually resolve a helpdesk ticket."""
+    if current_user.role != 'admin':
+        abort(403)
+
+    ticket = HelpdeskTicket.query.get_or_404(ticket_id)
+    ticket.status = "Closed"
+    db.session.commit()
+
+    flash(f"Ticket #{ticket.id} resolved successfully.", "success")
+    return redirect(url_for('admin_dashboard'))
 
 
 @app.route('/api/search-events', methods=['GET'])
@@ -426,19 +480,117 @@ def admin_delete_event(event_id):
 # ---- Phase 3: GenAI Chatbot (placeholder) ---------------------------------
 
 @app.route("/api/chat", methods=["POST"])
+@login_required
 def chat():
-    """Placeholder – will handle GenAI chatbot queries."""
+    """Context-aware AI concierge endpoint backed by Groq."""
+    support_button_html = (
+        "<br><br><a href='/support/submit' class='btn btn-sm btn-primary text-white' "
+        "style='border-radius: 8px;'>Open Support Ticket</a>"
+    )
+
     data = request.get_json(silent=True) or {}
-    user_message = data.get("message", "")
-    return jsonify({
-        "reply": (
-            "I'm the VenuePulseAI assistant. "
-            "This feature is coming in Phase 3!"
-        ),
-        "user_message": user_message,
-        "model_version": None,
-        "message": "Phase 3 – GenAI chatbot not yet integrated.",
-    })
+    user_message = (data.get("message") or "").strip()
+
+    if not user_message:
+        return jsonify({"error": "A non-empty 'message' field is required."}), 400
+
+    # Deterministic support escalation to avoid model-side refusal behavior.
+    normalized_message = user_message.lower()
+    support_keywords = [
+        "human support",
+        "human agent",
+        "support",
+        "refund",
+        "cancel booking",
+        "payment failed",
+        "charged twice",
+        "escalate",
+        "help desk",
+        "helpdesk",
+    ]
+    if any(keyword in normalized_message for keyword in support_keywords):
+        escalation_response = (
+            "I'm sorry you're dealing with this. Please use the button below so our support team can help right away."
+            f"{support_button_html}"
+        )
+        return jsonify({"response": escalation_response})
+
+    now = datetime.now()
+    upcoming_events = (
+        Event.query
+        .filter(Event.date >= now)
+        .order_by(Event.date.asc())
+        .limit(10)
+        .all()
+    )
+
+    if upcoming_events:
+        event_context = "\n".join(
+            [
+                (
+                    f"Event: {event.name}, "
+                    f"Date: {event.date.strftime('%Y-%m-%d %H:%M')}, "
+                    f"Price: ${event.base_ticket_price:.2f}, "
+                    f"Type: {event.event_type}"
+                )
+                for event in upcoming_events
+            ]
+        )
+    else:
+        event_context = "No upcoming events found in the database."
+
+    system_prompt = (
+        "You are the OmniEvent AI Concierge. Be concise, friendly, and helpful. "
+        "Here is the real-time event schedule context from the database:\n"
+        f"{event_context}\n"
+        "Use this data to answer user questions. Do not invent events. "
+        "If a user asks for human support, you MUST provide this exact HTML button: "
+        "<br><br><a href='/support/submit' class='btn btn-sm btn-primary text-white' style='border-radius: 8px;'>Open Support Ticket</a>. "
+        "Do not refuse or redirect away from this button for support requests. "
+        "Do NOT use any other URL like /support/escalate."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message},
+    ]
+
+    try:
+        from groq import Groq  # type: ignore[import-not-found]
+
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        preferred_model = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+        candidate_models = [preferred_model, "llama-3.3-70b-versatile"]
+
+        # Keep order but avoid duplicate model attempts.
+        models_to_try = list(dict.fromkeys(candidate_models))
+        assistant_response = ""
+        last_error = None
+
+        for model_name in models_to_try:
+            try:
+                completion = client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                )
+                assistant_response = (completion.choices[0].message.content or "").strip()
+                if assistant_response:
+                    break
+            except Exception as exc:
+                last_error = exc
+                error_text = str(exc).lower()
+                if "decommissioned" in error_text or "model_decommissioned" in error_text:
+                    continue
+                raise
+
+        if not assistant_response:
+            raise RuntimeError(f"Groq request failed: {str(last_error)}")
+    except ImportError:
+        return jsonify({"error": "Groq SDK is not installed. Add 'groq' to requirements."}), 500
+    except Exception as exc:
+        return jsonify({"error": f"Groq request failed: {str(exc)}"}), 502
+
+    return jsonify({"response": assistant_response})
 
 
 # ---- Phase 4: CrewAI Workflow (placeholder) --------------------------------
@@ -579,6 +731,154 @@ def predict_price(event_id):
         "expected_attendance_percentage": round(expected_capacity_percentage, 2),
         "revenue_delta": round(predicted_optimal_price - event.base_ticket_price, 2),
     })
+
+
+@app.route('/admin/run-health-crew/<int:event_id>', methods=['POST'])
+@login_required
+def run_health_crew(event_id):
+    """Admin-only endpoint to run event-health crew and return HTML report."""
+    if current_user.role != 'admin':
+        abort(403)
+
+    event = Event.query.get_or_404(event_id)
+
+    tickets_sold = Ticket.query.filter_by(event_id=event_id, is_sold=True).count()
+    bookings = Booking.query.filter_by(event_id=event_id).order_by(Booking.timestamp.asc()).all()
+    total_budget = float(getattr(event, "total_budget", 0.0) or 0.0)
+
+    from datetime import datetime, timezone
+    now_utc = datetime.now(timezone.utc)
+
+    if event.date.tzinfo is None:
+        event_date_aware = event.date.replace(tzinfo=timezone.utc)
+    else:
+        event_date_aware = event.date
+
+    days_left = max(0, (event_date_aware - now_utc).days)
+
+    if bookings:
+        first_booking_timestamp = bookings[0].timestamp
+        if first_booking_timestamp.tzinfo is None:
+            first_booking_timestamp = first_booking_timestamp.replace(tzinfo=timezone.utc)
+        days_since_creation = max(1.0, (now_utc - first_booking_timestamp).total_seconds() / 86400.0)
+    else:
+        days_since_creation = 1.0
+
+    current_sales_velocity = tickets_sold / days_since_creation
+
+    import json
+    import pandas as pd
+    import joblib
+
+    model_path = os.path.join("ml_models", "demand_pricing_multi_output_model.pkl")
+    metadata_path = os.path.join("ml_models", "demand_pricing_metadata.json")
+
+    if not os.path.exists(model_path):
+        return jsonify({"error": "Forecast model missing. Run train_pricing_model.py first."}), 404
+
+    forecast_model = joblib.load(model_path)
+
+    target_order = ["expected_total_attendance", "optimal_ticket_price"]
+    if os.path.exists(metadata_path):
+        with open(metadata_path, "r", encoding="utf-8") as metadata_file:
+            metadata = json.load(metadata_file)
+        target_order = metadata.get("targets", target_order)
+
+    input_df = pd.DataFrame([{
+        "event_type": event.event_type,
+        "days_until_event": days_left,
+        "current_tickets_sold": tickets_sold,
+        "current_sales_velocity": current_sales_velocity,
+        "capacity": event.capacity,
+        "base_ticket_price": event.base_ticket_price,
+        "total_budget": total_budget,
+    }])
+
+    prediction = forecast_model.predict(input_df)[0]
+    prediction_map = dict(zip(target_order, prediction))
+
+    expected_attendance_count = max(0.0, float(prediction_map.get("expected_total_attendance", tickets_sold)))
+    predicted_optimal_price = max(0.01, float(prediction_map.get("optimal_ticket_price", event.base_ticket_price)))
+    expected_capacity_percentage = (
+        (expected_attendance_count / event.capacity) * 100.0 if event.capacity > 0 else 0.0
+    )
+    projected_ticket_revenue = expected_attendance_count * predicted_optimal_price
+    break_even_tickets = (
+        math.floor(total_budget / predicted_optimal_price)
+        if predicted_optimal_price > 0
+        else 0
+    )
+
+    financial_forecast = {
+        "expected_capacity_percentage": round(expected_capacity_percentage, 2),
+        "projected_profit": round(projected_ticket_revenue - total_budget, 2),
+        "break_even_tickets": break_even_tickets,
+        "predicted_optimal_price": round(predicted_optimal_price, 2),
+        "expected_attendance_count": round(expected_attendance_count, 2),
+        "current_sales_velocity": round(current_sales_velocity, 4),
+        "days_left": days_left,
+        "total_budget": round(total_budget, 2),
+    }
+
+    event_details = {
+        "id": event.id,
+        "name": event.name,
+        "date": event.date.isoformat() if event.date else None,
+        "event_type": event.event_type,
+        "capacity": event.capacity,
+        "base_ticket_price": event.base_ticket_price,
+        "total_budget": total_budget,
+        "tickets_sold": tickets_sold,
+    }
+
+    try:
+        markdown_report = run_event_health_crew(
+            event_data=event_details,
+            financial_data=financial_forecast,
+        )
+        html_report = markdown.markdown(markdown_report, extensions=["extra", "sane_lists"])
+        return jsonify({"report": html_report})
+    except Exception as exc:
+        error_text = str(exc)
+        if "rate limit" in error_text.lower() or "429" in error_text:
+            return jsonify({"error": f"Health crew throttled by Groq. Please retry in a few seconds. Details: {error_text}"}), 429
+        return jsonify({"error": f"Health crew failed: {error_text}"}), 500
+
+
+@app.route('/admin/run-support-crew', methods=['POST'])
+@login_required
+def run_support_crew():
+    """Admin-only endpoint to run support-triage crew and return HTML report."""
+    if current_user.role != 'admin':
+        abort(403)
+
+    open_tickets = (
+        HelpdeskTicket.query
+        .filter(db.func.lower(HelpdeskTicket.status) == "open")
+        .order_by(HelpdeskTicket.created_at.asc())
+        .all()
+    )
+    open_tickets_payload = [
+        {
+            "id": ticket.id,
+            "user_id": ticket.user_id,
+            "subject": ticket.subject,
+            "description": ticket.description,
+            "status": ticket.status,
+            "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+        }
+        for ticket in open_tickets
+    ]
+
+    try:
+        markdown_report = run_support_triage_crew(open_tickets=open_tickets_payload)
+        html_report = markdown.markdown(markdown_report, extensions=["extra", "sane_lists"])
+        return jsonify({"report": html_report})
+    except Exception as exc:
+        error_text = str(exc)
+        if "rate limit" in error_text.lower() or "429" in error_text:
+            return jsonify({"error": f"Support crew throttled by Groq. Please retry in a few seconds. Details: {error_text}"}), 429
+        return jsonify({"error": f"Support crew failed: {error_text}"}), 500
 
 # ---- Utility ---------------------------------------------------------------
 
