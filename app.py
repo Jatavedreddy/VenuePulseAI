@@ -1,14 +1,17 @@
 """VenuePulseAI – Main Flask Application."""
 
 import os
+import re
 from datetime import datetime, timezone
 import math
 import markdown
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, abort
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from flask_login import LoginManager, login_required, current_user, login_user, logout_user
 from sqlalchemy import text
+from uuid import uuid4
 
 load_dotenv()
 
@@ -21,9 +24,37 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///venue.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # db is defined in models.py; bind it to this app
-from models import db, Event, Ticket, ConcessionSale, StaffShift, User, Booking, HelpdeskTicket  # noqa: E402
+from models import db, Event, Ticket, ConcessionSale, StaffShift, User, Booking, HelpdeskTicket, KnowledgeDocument  # noqa: E402
 from ai_crew import run_event_health_crew, run_support_triage_crew  # noqa: E402
 db.init_app(app)
+
+ALLOWED_KNOWLEDGE_EXTENSIONS = {"pdf", "txt", "md"}
+KNOWLEDGE_UPLOAD_DIR = os.path.join(app.instance_path, "knowledge_docs")
+os.makedirs(KNOWLEDGE_UPLOAD_DIR, exist_ok=True)
+SUPPORT_BUTTON_HTML = (
+    "<br><br><a href='/support/submit' class='btn btn-sm btn-primary text-white' "
+    "style='border-radius: 8px;'>Open Support Ticket</a>"
+)
+
+SUPPORT_ESCALATION_PHRASES = [
+    "human support",
+    "human agent",
+    "open support ticket",
+    "raise a support ticket",
+    "submit a support ticket",
+    "talk to support",
+    "contact support",
+    "help desk",
+    "helpdesk",
+    "refund",
+    "cancel booking",
+    "payment failed",
+    "charged twice",
+    "escalate",
+    "escalate this",
+    "escalate to human",
+    "speak to someone",
+]
 
 # Setup Flask-Login
 login_manager = LoginManager()
@@ -51,6 +82,126 @@ def ensure_schema_compatibility():
             text("ALTER TABLE events ADD COLUMN total_budget FLOAT NOT NULL DEFAULT 0.0")
         )
         db.session.commit()
+
+
+def is_allowed_knowledge_file(filename):
+    return (
+        bool(filename)
+        and "." in filename
+        and filename.rsplit(".", 1)[1].lower() in ALLOWED_KNOWLEDGE_EXTENSIONS
+    )
+
+
+def extract_text_from_document(file_path):
+    extension = os.path.splitext(file_path)[1].lower()
+
+    if extension == ".pdf":
+        from pypdf import PdfReader  # type: ignore[import-not-found]
+
+        reader = PdfReader(file_path)
+        pages = [(page.extract_text() or "") for page in reader.pages]
+        return "\n".join(pages).strip()
+
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as file_handle:
+        return file_handle.read().strip()
+
+
+def split_text_chunks(text, chunk_size=900, overlap=150):
+    normalized = " ".join((text or "").split())
+    if not normalized:
+        return []
+
+    chunks = []
+    step = max(1, chunk_size - overlap)
+    for start in range(0, len(normalized), step):
+        chunk = normalized[start:start + chunk_size].strip()
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+
+def get_relevant_knowledge_snippets(query, top_k=4):
+    documents = KnowledgeDocument.query.order_by(KnowledgeDocument.uploaded_at.desc()).all()
+    if not documents:
+        return [], []
+
+    chunk_records = []
+    for doc in documents:
+        for chunk in split_text_chunks(doc.extracted_text):
+            chunk_records.append({
+                "text": chunk,
+                "source": doc.original_filename,
+            })
+
+    if not chunk_records:
+        return [], []
+
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity
+    except Exception:
+        # If sklearn is unavailable at runtime, return no snippets rather than crashing chat.
+        return [], []
+
+    corpus = [record["text"] for record in chunk_records]
+    vectorizer = TfidfVectorizer(stop_words="english", max_features=6000)
+
+    try:
+        matrix = vectorizer.fit_transform(corpus + [query])
+    except ValueError:
+        return [], []
+
+    query_vector = matrix[-1]
+    doc_matrix = matrix[:-1]
+    similarities = cosine_similarity(query_vector, doc_matrix).flatten()
+
+    ranked_indices = similarities.argsort()[::-1]
+    selected_snippets = []
+    selected_sources = []
+
+    for idx in ranked_indices:
+        if len(selected_snippets) >= top_k:
+            break
+        score = float(similarities[idx])
+        if score < 0.05:
+            continue
+
+        record = chunk_records[idx]
+        selected_snippets.append(record["text"])
+        if record["source"] not in selected_sources:
+            selected_sources.append(record["source"])
+
+    return selected_snippets, selected_sources
+
+
+def is_human_support_request(message):
+    normalized = " ".join((message or "").lower().split())
+    if not normalized:
+        return False
+    return any(phrase in normalized for phrase in SUPPORT_ESCALATION_PHRASES)
+
+
+def strip_support_button_markup(text):
+    cleaned = text or ""
+
+    # Remove the exact support button block (with optional <br> wrappers).
+    cleaned = re.sub(
+        r"(?:<br\\s*/?>\\s*){0,3}<a\\s+href=['\"]/support/submit['\"][^>]*>Open Support Ticket</a>",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove common dangling phrase when the button was inserted mid-sentence.
+    cleaned = re.sub(
+        r"(?:,\\s*)?or you can\\s*for assistance\\.?",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    cleaned = re.sub(r"\\n{3,}", "\\n\\n", cleaned)
+    return cleaned.strip()
 
 # ---------------------------------------------------------------------------
 # Auto-create tables before the first request
@@ -337,6 +488,7 @@ def admin_dashboard():
     )
     recent_events = Event.query.order_by(Event.id.desc()).limit(5).all()
     all_events = Event.query.order_by(Event.date.desc()).all()
+    knowledge_documents = KnowledgeDocument.query.order_by(KnowledgeDocument.uploaded_at.desc()).limit(10).all()
     upcoming_events = Event.query.filter(
         Event.date >= datetime.now(timezone.utc)
     ).order_by(Event.date.asc()).limit(5).all()
@@ -357,6 +509,7 @@ def admin_dashboard():
         total_concession_revenue=total_concession_revenue,
         recent_events=recent_events,
         all_events=all_events,
+        knowledge_documents=knowledge_documents,
         upcoming_events=upcoming_events,
         open_tickets=open_tickets,
         open_tickets_count=open_tickets_count,
@@ -600,41 +753,105 @@ def admin_delete_event(event_id):
     return redirect(url_for('admin_dashboard'))
 
 
+@app.route('/admin/upload-knowledge', methods=['POST'])
+@login_required
+def admin_upload_knowledge():
+    """Admin-only endpoint for uploading PDF/text knowledge for user chat."""
+    if current_user.role != 'admin':
+        abort(403)
+
+    uploaded_file = request.files.get('document')
+    if uploaded_file is None or not uploaded_file.filename:
+        flash('Please select a document to upload.', 'warning')
+        return redirect(url_for('admin_dashboard'))
+
+    if not is_allowed_knowledge_file(uploaded_file.filename):
+        flash('Unsupported document type. Upload a PDF, TXT, or MD file.', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+    original_filename = uploaded_file.filename
+    safe_filename = secure_filename(original_filename)
+    extension = os.path.splitext(safe_filename)[1].lower()
+    stored_filename = f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{extension}"
+    file_path = os.path.join(KNOWLEDGE_UPLOAD_DIR, stored_filename)
+
+    uploaded_file.save(file_path)
+
+    try:
+        extracted_text = extract_text_from_document(file_path)
+    except Exception as exc:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        flash(f'Failed to read document: {exc}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+    if not extracted_text.strip():
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        flash('Uploaded file does not contain readable text.', 'warning')
+        return redirect(url_for('admin_dashboard'))
+
+    knowledge_document = KnowledgeDocument(
+        original_filename=original_filename,
+        stored_filename=stored_filename,
+        file_path=file_path,
+        extracted_text=extracted_text,
+        uploaded_by_user_id=current_user.id,
+    )
+    db.session.add(knowledge_document)
+    db.session.commit()
+
+    flash('Knowledge document uploaded successfully!', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/delete-knowledge/<int:document_id>', methods=['POST'])
+@login_required
+def admin_delete_knowledge(document_id):
+    """Admin-only endpoint to delete an uploaded knowledge document."""
+    if current_user.role != 'admin':
+        abort(403)
+
+    document = KnowledgeDocument.query.get_or_404(document_id)
+    file_path = document.file_path
+    file_delete_error = None
+
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except OSError as exc:
+            file_delete_error = str(exc)
+
+    db.session.delete(document)
+    db.session.commit()
+
+    if file_delete_error:
+        flash(f'Knowledge record deleted, but file cleanup failed: {file_delete_error}', 'warning')
+    else:
+        flash('Knowledge document deleted successfully!', 'success')
+
+    return redirect(url_for('admin_dashboard'))
+
+
 # ---- Phase 3: GenAI Chatbot (placeholder) ---------------------------------
 
 @app.route("/api/chat", methods=["POST"])
 @login_required
 def chat():
     """Context-aware AI concierge endpoint backed by Groq."""
-    support_button_html = (
-        "<br><br><a href='/support/submit' class='btn btn-sm btn-primary text-white' "
-        "style='border-radius: 8px;'>Open Support Ticket</a>"
-    )
-
     data = request.get_json(silent=True) or {}
     user_message = (data.get("message") or "").strip()
 
     if not user_message:
         return jsonify({"error": "A non-empty 'message' field is required."}), 400
 
+    wants_human_support = is_human_support_request(user_message)
+
     # Deterministic support escalation to avoid model-side refusal behavior.
-    normalized_message = user_message.lower()
-    support_keywords = [
-        "human support",
-        "human agent",
-        "support",
-        "refund",
-        "cancel booking",
-        "payment failed",
-        "charged twice",
-        "escalate",
-        "help desk",
-        "helpdesk",
-    ]
-    if any(keyword in normalized_message for keyword in support_keywords):
+    if wants_human_support:
         escalation_response = (
             "I'm sorry you're dealing with this. Please use the button below so our support team can help right away."
-            f"{support_button_html}"
+            f"{SUPPORT_BUTTON_HTML}"
         )
         return jsonify({"response": escalation_response})
 
@@ -646,9 +863,10 @@ def chat():
         .limit(10)
         .all()
     )
+    recently_added_events = Event.query.order_by(Event.id.desc()).limit(10).all()
 
-    if upcoming_events:
-        event_context = "\n".join(
+    def format_events(events):
+        return "\n".join(
             [
                 (
                     f"Event: {event.name}, "
@@ -656,20 +874,53 @@ def chat():
                     f"Price: ${event.base_ticket_price:.2f}, "
                     f"Type: {event.event_type}"
                 )
-                for event in upcoming_events
+                for event in events
             ]
         )
+
+    context_sections = []
+    if upcoming_events:
+        context_sections.append(
+            "[Next 10 Upcoming Events]\n" + format_events(upcoming_events)
+        )
     else:
-        event_context = "No upcoming events found in the database."
+        context_sections.append("[Next 10 Upcoming Events]\nNo upcoming events found in the database.")
+
+    if recently_added_events:
+        context_sections.append(
+            "[Recently Added Events (Newest First)]\n" + format_events(recently_added_events)
+        )
+
+    knowledge_snippets, knowledge_sources = get_relevant_knowledge_snippets(user_message)
+    if knowledge_snippets:
+        formatted_snippets = "\n".join([f"- {snippet}" for snippet in knowledge_snippets])
+        context_sections.append(
+            "[Relevant Uploaded Knowledge Snippets]\n"
+            + formatted_snippets
+        )
+    else:
+        total_knowledge_docs = KnowledgeDocument.query.count()
+        if total_knowledge_docs > 0:
+            context_sections.append(
+                "[Relevant Uploaded Knowledge Snippets]\nNo highly relevant snippets found for this question."
+            )
+        else:
+            context_sections.append(
+                "[Relevant Uploaded Knowledge Snippets]\nNo knowledge documents have been uploaded yet."
+            )
+
+    event_context = "\n\n".join(context_sections)
 
     system_prompt = (
         "You are the OmniEvent AI Concierge. Be concise, friendly, and helpful. "
         "Here is the real-time event schedule context from the database:\n"
         f"{event_context}\n"
-        "Use this data to answer user questions. Do not invent events. "
-        "If a user asks for human support, you MUST provide this exact HTML button: "
-        "<br><br><a href='/support/submit' class='btn btn-sm btn-primary text-white' style='border-radius: 8px;'>Open Support Ticket</a>. "
-        "Do not refuse or redirect away from this button for support requests. "
+        "Use this data to answer user questions, including newly created events. Do not invent events. "
+        "If uploaded document snippets are provided, use them as factual ground truth and cite short source names when relevant. "
+        f"Human support escalation intent for this user message: {'YES' if wants_human_support else 'NO'}. "
+        "If intent is YES, provide this exact HTML button exactly once at the end: "
+        f"{SUPPORT_BUTTON_HTML}. "
+        "If intent is NO, do not mention support ticketing and do not include any support button. "
         "Do NOT use any other URL like /support/escalate."
     )
 
@@ -712,6 +963,17 @@ def chat():
         return jsonify({"error": "Groq SDK is not installed. Add 'groq' to requirements."}), 500
     except Exception as exc:
         return jsonify({"error": f"Groq request failed: {str(exc)}"}), 502
+
+    if wants_human_support:
+        if SUPPORT_BUTTON_HTML not in assistant_response:
+            assistant_response = assistant_response.rstrip() + SUPPORT_BUTTON_HTML
+    else:
+        assistant_response = strip_support_button_markup(assistant_response)
+
+    if knowledge_sources:
+        assistant_response += (
+            "\n\nSources: " + ", ".join(knowledge_sources[:4])
+        )
 
     return jsonify({"response": assistant_response})
 

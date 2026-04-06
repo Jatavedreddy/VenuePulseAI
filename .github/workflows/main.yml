@@ -23,8 +23,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Normalize image tag
+        run: echo "IMAGE_TAG=ghcr.io/${GITHUB_REPOSITORY,,}/omnievent-ai:latest" >> "$GITHUB_ENV"
+
       - name: Build Docker image
-        run: docker build -f Dockerfile -t ghcr.io/${{ github.repository }}/omnievent-ai:latest .
+        run: docker build -f Dockerfile -t "$IMAGE_TAG" .
 
       - name: Push Docker image
-        run: docker push ghcr.io/${{ github.repository }}/omnievent-ai:latest
+        run: docker push "$IMAGE_TAG"

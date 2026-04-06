@@ -73,6 +73,33 @@ class Event(db.Model):
 
 
 # ---------------------------------------------------------------------------
+# KnowledgeDocument
+# ---------------------------------------------------------------------------
+class KnowledgeDocument(db.Model):
+    """Uploaded knowledge artifacts used by the user chat assistant."""
+
+    __tablename__ = "knowledge_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    original_filename = db.Column(db.String(255), nullable=False)
+    stored_filename = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    extracted_text = db.Column(db.Text, nullable=False)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def __init__(self, original_filename, stored_filename, file_path, extracted_text, uploaded_by_user_id=None):
+        self.original_filename = original_filename
+        self.stored_filename = stored_filename
+        self.file_path = file_path
+        self.extracted_text = extracted_text
+        self.uploaded_by_user_id = uploaded_by_user_id
+
+    def __repr__(self):
+        return f"<KnowledgeDocument id={self.id} file='{self.original_filename}'>"
+
+
+# ---------------------------------------------------------------------------
 # Booking
 # ---------------------------------------------------------------------------
 class Booking(db.Model):

@@ -76,7 +76,7 @@ h1, h2, h3, h4, h5, h6, .vp-brand {
     opacity: 0.85; /* Increased to counteract the severe blur diffusion */
     z-index: -1;
     pointer-events: none;
-    animation: drift 10s infinite alternate ease-in-out;
+    animation: drift 6s infinite alternate ease-in-out;
 }
 
 .ambient-blob--1 {
@@ -94,7 +94,7 @@ h1, h2, h3, h4, h5, h6, .vp-brand {
     bottom: -100px;
     right: -150px;
     animation-delay: -2s;
-    animation-duration: 14s;
+    animation-duration: 8s;
 }
 
 /* ===== Animations ===== */

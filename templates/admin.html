@@ -541,6 +541,75 @@
         </div>
     </div>
 
+    <!-- ===== Knowledge Base Upload ===== -->
+    <div class="card vp-panel border-0 animate-fade-up delay-400 mb-5">
+        <div class="card-header vp-panel__header d-flex align-items-center justify-content-between">
+            <h5 class="fw-bold mb-0">
+                <i class="bi bi-file-earmark-richtext me-2 text-info"></i>Knowledge Base Documents
+            </h5>
+            <span class="badge bg-info bg-opacity-10 text-info">Admin Uploads</span>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin_upload_knowledge') }}" enctype="multipart/form-data" class="mb-4">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-9">
+                        <label for="knowledgeDocument" class="form-label text-secondary small">Upload PDF / TXT / MD</label>
+                        <input
+                            type="file"
+                            class="form-control vp-select"
+                            id="knowledgeDocument"
+                            name="document"
+                            accept=".pdf,.txt,.md"
+                            required
+                        >
+                    </div>
+                    <div class="col-md-3 d-grid">
+                        <button type="submit" class="btn vp-btn-primary">
+                            <i class="bi bi-upload me-1"></i>Upload
+                        </button>
+                    </div>
+                </div>
+                <p class="text-secondary small mt-2 mb-0">
+                    Uploaded documents are indexed and used by the non-admin chat assistant for question answering.
+                </p>
+            </form>
+
+            {% if knowledge_documents %}
+            <div class="table-responsive">
+                <table class="table table-dark table-hover vp-table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Uploaded</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in knowledge_documents %}
+                        <tr>
+                            <td class="fw-semibold">{{ doc.original_filename }}</td>
+                            <td class="text-secondary">{{ doc.uploaded_at.strftime('%b %d, %Y %H:%M') }}</td>
+                            <td class="text-end">
+                                <form
+                                    method="POST"
+                                    action="{{ url_for('admin_delete_knowledge', document_id=doc.id) }}"
+                                    class="d-inline"
+                                    onsubmit="return confirm('Delete this knowledge document?');"
+                                >
+                                    <button type="submit" class="btn btn-sm btn-outline-danger vp-btn-sm">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-secondary small">No documents uploaded yet.</div>
+            {% endif %}
+        </div>
+    </div>
+
     <!-- ===== Helpdesk & Support Queue ===== -->
     <div class="card vp-panel border-0 animate-fade-up delay-400 mb-5">
         <div class="card-header vp-panel__header d-flex align-items-center justify-content-between">
