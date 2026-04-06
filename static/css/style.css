@@ -588,6 +588,36 @@ h1, h2, h3, h4, h5, h6, .vp-brand {
     border-radius: 0 0 var(--vp-radius) var(--vp-radius);
 }
 
+.vp-chat-mic-btn {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.vp-chat-mic-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+}
+
+.vp-chat-mic-btn.listening {
+    background: linear-gradient(135deg, rgba(230, 57, 70, 0.95), rgba(244, 140, 6, 0.95));
+    border-color: rgba(255, 255, 255, 0.35);
+    box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.2);
+}
+
+.vp-chat-mic-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .vp-chat-input {
     background: rgba(255, 255, 255, 0.07) !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;

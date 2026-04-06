@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime, timezone
 import math
+import time
 import markdown
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, abort
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -933,18 +934,15 @@ def chat():
         from groq import Groq  # type: ignore[import-not-found]
 
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-        preferred_model = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
-        candidate_models = [preferred_model, "llama-3.3-70b-versatile"]
-
-        # Keep order but avoid duplicate model attempts.
-        models_to_try = list(dict.fromkeys(candidate_models))
+        selected_model = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
         assistant_response = ""
         last_error = None
+        max_attempts_per_model = 3
 
-        for model_name in models_to_try:
+        for attempt in range(max_attempts_per_model):
             try:
                 completion = client.chat.completions.create(
-                    model=model_name,
+                    model=selected_model,
                     messages=messages,
                 )
                 assistant_response = (completion.choices[0].message.content or "").strip()
@@ -953,11 +951,48 @@ def chat():
             except Exception as exc:
                 last_error = exc
                 error_text = str(exc).lower()
-                if "decommissioned" in error_text or "model_decommissioned" in error_text:
-                    continue
+                is_over_capacity = (
+                    "over capacity" in error_text
+                    or "error code: 503" in error_text
+                    or "internal_server_error" in error_text
+                )
+                is_rate_limited = (
+                    "rate limit" in error_text
+                    or "too many requests" in error_text
+                    or "error code: 429" in error_text
+                )
+
+                if is_over_capacity or is_rate_limited:
+                    # Retry selected model with exponential backoff.
+                    if attempt < max_attempts_per_model - 1:
+                        backoff_seconds = 0.6 * (2 ** attempt)
+                        time.sleep(backoff_seconds)
+                        continue
+                    break
+
+                # No fallback requested: surface non-capacity errors immediately.
                 raise
 
         if not assistant_response:
+            last_error_text = str(last_error).lower() if last_error else ""
+            if "over capacity" in last_error_text or "error code: 503" in last_error_text:
+                return jsonify(
+                    {
+                        "error": (
+                            "Groq is temporarily over capacity for the selected model. "
+                            "Please try again in a few seconds."
+                        )
+                    }
+                ), 503
+            if "rate limit" in last_error_text or "error code: 429" in last_error_text:
+                return jsonify(
+                    {
+                        "error": (
+                            "Rate limit reached for the selected model. "
+                            "Please retry shortly."
+                        )
+                    }
+                ), 429
             raise RuntimeError(f"Groq request failed: {str(last_error)}")
     except ImportError:
         return jsonify({"error": "Groq SDK is not installed. Add 'groq' to requirements."}), 500

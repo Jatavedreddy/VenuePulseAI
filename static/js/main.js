@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const isAuthenticated = document.body?.dataset?.authenticated === "true";
     const userId = document.body?.dataset?.userId || "";
+    const userName = (document.body?.dataset?.userName || "").trim();
 
     function removeAllChatStorage() {
         try {
@@ -40,14 +41,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const chatClose = document.getElementById("chatClose");
     const chatMessages = document.getElementById("chatMessages");
     const chatInput = document.getElementById("chatInput");
+    const chatMicBtn = document.getElementById("chatMicBtn");
     const chatSendBtn = document.getElementById("chatSendBtn");
 
-    if (!chatFab || !chatPopover || !chatClose || !chatMessages || !chatInput || !chatSendBtn) {
+    if (!chatFab || !chatPopover || !chatClose || !chatMessages || !chatInput || !chatMicBtn || !chatSendBtn) {
         return;
     }
 
     const CHAT_HISTORY_KEY = `vp_chat_history_v1_${userId}`;
     const CHAT_UI_STATE_KEY = `vp_chat_ui_state_v1_${userId}`;
+    const CHAT_VOICE_GREETING_KEY = `vp_chat_voice_greeted_v1_${userId}`;
     const MAX_HISTORY_MESSAGES = 60;
 
     // Clean up legacy non-scoped keys created before per-user isolation.
@@ -55,6 +58,77 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.removeItem("vp_chat_ui_state_v1");
 
     let isSending = false;
+    let isListening = false;
+
+    const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = SpeechRecognitionApi ? new SpeechRecognitionApi() : null;
+
+    if (recognition) {
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.lang = navigator.language || "en-US";
+    }
+
+    function setMicListeningState(listening) {
+        isListening = listening;
+        chatMicBtn.classList.toggle("listening", listening);
+        chatMicBtn.setAttribute("aria-pressed", listening ? "true" : "false");
+
+        const micIcon = chatMicBtn.querySelector("i");
+        if (micIcon) {
+            micIcon.className = listening ? "bi bi-mic-fill" : "bi bi-mic";
+        }
+    }
+
+    function speakInitialGreetingIfNeeded() {
+        if (localStorage.getItem(CHAT_VOICE_GREETING_KEY) === "true") {
+            return;
+        }
+
+        localStorage.setItem(CHAT_VOICE_GREETING_KEY, "true");
+        if (!("speechSynthesis" in window)) {
+            return;
+        }
+
+        const greetingText = userName
+            ? `Hi ${userName}. Welcome to VenuePulse AI. Ask me about upcoming events and pricing.`
+            : "Hi. Welcome to VenuePulse AI. Ask me about upcoming events and pricing.";
+
+        const utterance = new SpeechSynthesisUtterance(greetingText);
+        utterance.lang = "en-US";
+        utterance.rate = 1;
+        utterance.pitch = 1;
+
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+    }
+
+    async function translateToEnglish(text) {
+        const sourceText = (text || "").trim();
+        if (!sourceText) {
+            return "";
+        }
+
+        const endpoint = "https://translate.googleapis.com/translate_a/single"
+            + `?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(sourceText)}`;
+
+        try {
+            const response = await fetch(endpoint);
+            if (!response.ok) {
+                return sourceText;
+            }
+
+            const payload = await response.json();
+            const translatedText = Array.isArray(payload?.[0])
+                ? payload[0].map((part) => (Array.isArray(part) ? part[0] : "")).join("")
+                : "";
+
+            return (translatedText || sourceText).trim();
+        } catch (_err) {
+            return sourceText;
+        }
+    }
 
     function loadHistory() {
         try {
@@ -216,6 +290,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (chatPopover.classList.contains("open")) {
             chatInput.focus();
             scrollChatToBottom();
+            speakInitialGreetingIfNeeded();
         }
     });
 
@@ -233,10 +308,69 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    if (!recognition) {
+        chatMicBtn.disabled = true;
+        chatMicBtn.title = "Voice input is not supported in this browser.";
+    } else {
+        recognition.onresult = async (event) => {
+            const transcript = event?.results?.[0]?.[0]?.transcript?.trim() || "";
+            if (!transcript) {
+                return;
+            }
+
+            const translatedText = await translateToEnglish(transcript);
+            if (!translatedText) {
+                return;
+            }
+
+            chatInput.value = translatedText;
+            sendChatMessage();
+        };
+
+        recognition.onerror = () => {
+            setMicListeningState(false);
+            appendChatBubble(
+                "I couldn't capture your voice input. Please allow microphone access and try again.",
+                "bot",
+                false
+            );
+        };
+
+        recognition.onend = () => {
+            setMicListeningState(false);
+        };
+
+        chatMicBtn.addEventListener("click", () => {
+            if (isSending) {
+                return;
+            }
+
+            if (isListening) {
+                recognition.stop();
+                return;
+            }
+
+            recognition.lang = navigator.language || "en-US";
+
+            try {
+                recognition.start();
+                setMicListeningState(true);
+            } catch (_err) {
+                setMicListeningState(false);
+                appendChatBubble(
+                    "Microphone could not start. Please try again.",
+                    "bot",
+                    false
+                );
+            }
+        });
+    }
+
     document.querySelectorAll("[data-logout-link='true']").forEach((logoutLink) => {
         logoutLink.addEventListener("click", () => {
             localStorage.removeItem(CHAT_HISTORY_KEY);
             localStorage.removeItem(CHAT_UI_STATE_KEY);
+            localStorage.removeItem(CHAT_VOICE_GREETING_KEY);
         });
     });
 
@@ -244,5 +378,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (restoreUiState()) {
         chatPopover.classList.add("open");
         chatFab.classList.add("active");
+        speakInitialGreetingIfNeeded();
     }
 });

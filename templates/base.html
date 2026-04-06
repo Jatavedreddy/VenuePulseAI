@@ -22,6 +22,7 @@
 <body
     data-authenticated="{{ 'true' if current_user.is_authenticated else 'false' }}"
     data-user-id="{{ current_user.id if current_user.is_authenticated else '' }}"
+    data-user-name="{{ current_user.name if current_user.is_authenticated else '' }}"
 >
 
     <!-- ===== Ambient Background ===== -->
@@ -144,6 +145,9 @@
                 id="chatInput"
                 placeholder="Ask me anything..."
             >
+            <button class="btn btn-sm vp-chat-mic-btn" id="chatMicBtn" type="button" aria-label="Speak message" title="Speak message">
+                <i class="bi bi-mic"></i>
+            </button>
             <button class="btn btn-sm vp-btn-primary" id="chatSendBtn" type="button" aria-label="Send message">
                 <i class="bi bi-send-fill"></i>
             </button>
