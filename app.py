@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 from datetime import datetime, timezone
 import math
 import time
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 from flask_login import LoginManager, login_required, current_user, login_user, logout_user
 from sqlalchemy import text
 from uuid import uuid4
+
 
 load_dotenv()
 
@@ -31,12 +33,24 @@ elif is_local_env:
 else:
     raise RuntimeError("FLASK_SECRET_KEY must be set in non-local environments.")
 
-# Build an absolute path to the directory this file is in
+# 1. Define paths
 basedir = os.path.abspath(os.path.dirname(__file__))
+original_db = os.path.join(basedir, "venue.db")
+writable_db = "/tmp/venue.db"
 
-# Tell Flask to use the absolute path for venue.db
+# 2. Check if we are in Azure (using the Blob Connection String as our flag)
+if os.environ.get("AZURE_STORAGE_CONNECTION_STRING"):
+    # If in Azure, copy the DB to the writable /tmp directory if it hasn't been copied yet
+    if os.path.exists(original_db) and not os.path.exists(writable_db):
+        shutil.copy(original_db, writable_db)
+    db_path = writable_db
+else:
+    # If local on your Mac, just use the normal local database
+    db_path = original_db
+
+# 3. Set the configuration
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-    "DATABASE_URL", "sqlite:///" + os.path.join(basedir, "venue.db")
+    "DATABASE_URL", "sqlite:///" + db_path
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
