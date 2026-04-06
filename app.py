@@ -31,6 +31,7 @@ db.init_app(app)
 
 ALLOWED_KNOWLEDGE_EXTENSIONS = {"pdf", "txt", "md"}
 KNOWLEDGE_UPLOAD_DIR = os.path.join(app.instance_path, "knowledge_docs")
+KNOWLEDGE_BLOB_CONTAINER = "knowledge-base"
 os.makedirs(KNOWLEDGE_UPLOAD_DIR, exist_ok=True)
 SUPPORT_BUTTON_HTML = (
     "<br><br><a href='/support/submit' class='btn btn-sm btn-primary text-white' "
@@ -105,6 +106,26 @@ def extract_text_from_document(file_path):
 
     with open(file_path, "r", encoding="utf-8", errors="ignore") as file_handle:
         return file_handle.read().strip()
+
+
+def upload_file_to_azure_blob(local_file_path, blob_name, connection_string):
+    """Upload a knowledge file to Azure Blob Storage and return its blob URL."""
+    from azure.storage.blob import BlobServiceClient  # type: ignore[import-not-found]
+
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service_client.get_container_client(KNOWLEDGE_BLOB_CONTAINER)
+
+    try:
+        container_client.create_container()
+    except Exception:
+        # Container likely already exists; continue with upload.
+        pass
+
+    blob_client = container_client.get_blob_client(blob=blob_name)
+    with open(local_file_path, "rb") as upload_stream:
+        blob_client.upload_blob(upload_stream, overwrite=True)
+
+    return blob_client.url
 
 
 def split_text_chunks(text, chunk_size=900, overlap=150):
@@ -774,35 +795,57 @@ def admin_upload_knowledge():
     safe_filename = secure_filename(original_filename)
     extension = os.path.splitext(safe_filename)[1].lower()
     stored_filename = f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{extension}"
-    file_path = os.path.join(KNOWLEDGE_UPLOAD_DIR, stored_filename)
+    local_file_path = os.path.join(KNOWLEDGE_UPLOAD_DIR, stored_filename)
 
-    uploaded_file.save(file_path)
+    uploaded_file.save(local_file_path)
 
     try:
-        extracted_text = extract_text_from_document(file_path)
+        extracted_text = extract_text_from_document(local_file_path)
     except Exception as exc:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        if os.path.exists(local_file_path):
+            os.remove(local_file_path)
         flash(f'Failed to read document: {exc}', 'danger')
         return redirect(url_for('admin_dashboard'))
 
     if not extracted_text.strip():
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        if os.path.exists(local_file_path):
+            os.remove(local_file_path)
         flash('Uploaded file does not contain readable text.', 'warning')
         return redirect(url_for('admin_dashboard'))
+
+    # Hybrid mode: prefer Azure Blob when configured, otherwise keep local disk.
+    connection_string = (os.getenv('AZURE_STORAGE_CONNECTION_STRING') or '').strip()
+    storage_backend = 'Local Disk'
+    stored_file_reference = local_file_path
+
+    if connection_string:
+        try:
+            stored_file_reference = upload_file_to_azure_blob(
+                local_file_path=local_file_path,
+                blob_name=stored_filename,
+                connection_string=connection_string,
+            )
+            storage_backend = 'Azure Blob'
+
+            # Remove local temp copy after successful cloud upload.
+            if os.path.exists(local_file_path):
+                os.remove(local_file_path)
+        except Exception as exc:
+            app.logger.warning("Azure upload failed, using local disk fallback: %s", exc)
+            storage_backend = 'Local Disk'
+            stored_file_reference = local_file_path
 
     knowledge_document = KnowledgeDocument(
         original_filename=original_filename,
         stored_filename=stored_filename,
-        file_path=file_path,
+        file_path=stored_file_reference,
         extracted_text=extracted_text,
         uploaded_by_user_id=current_user.id,
     )
     db.session.add(knowledge_document)
     db.session.commit()
 
-    flash('Knowledge document uploaded successfully!', 'success')
+    flash(f'Knowledge document uploaded successfully! Saved to {storage_backend}.', 'success')
     return redirect(url_for('admin_dashboard'))
 
 
