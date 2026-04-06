@@ -20,7 +20,17 @@ load_dotenv()
 # App & Database Initialization
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-fallback-key")
+flask_secret_key = os.getenv("FLASK_SECRET_KEY")
+app_env = (os.getenv("FLASK_ENV") or os.getenv("ENV") or "development").lower()
+is_local_env = app_env in {"development", "dev", "local", "test", "testing"}
+
+if flask_secret_key:
+    app.secret_key = flask_secret_key
+elif is_local_env:
+    app.secret_key = "dev-secret-key"
+else:
+    raise RuntimeError("FLASK_SECRET_KEY must be set in non-local environments.")
+
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///venue.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
