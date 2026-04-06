@@ -31,7 +31,13 @@ elif is_local_env:
 else:
     raise RuntimeError("FLASK_SECRET_KEY must be set in non-local environments.")
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///venue.db"
+# Build an absolute path to the directory this file is in
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Tell Flask to use the absolute path for venue.db
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+    "DATABASE_URL", "sqlite:///" + os.path.join(basedir, "venue.db")
+)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # db is defined in models.py; bind it to this app
