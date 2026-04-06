@@ -48,7 +48,12 @@ db.init_app(app)
 ALLOWED_KNOWLEDGE_EXTENSIONS = {"pdf", "txt", "md"}
 KNOWLEDGE_UPLOAD_DIR = os.path.join(app.instance_path, "knowledge_docs")
 KNOWLEDGE_BLOB_CONTAINER = "knowledge-base"
-os.makedirs(KNOWLEDGE_UPLOAD_DIR, exist_ok=True)
+# Only create the local upload directory if we are NOT using Azure Blob Storage
+if not os.environ.get("AZURE_STORAGE_CONNECTION_STRING"):
+    try:
+        os.makedirs(KNOWLEDGE_UPLOAD_DIR, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Could not create local upload folder: {e}")
 SUPPORT_BUTTON_HTML = (
     "<br><br><a href='/support/submit' class='btn btn-sm btn-primary text-white' "
     "style='border-radius: 8px;'>Open Support Ticket</a>"
