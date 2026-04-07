@@ -34,12 +34,16 @@ else:
     raise RuntimeError("FLASK_SECRET_KEY must be set in non-local environments.")
 
 # 1. Define paths
-basedir = os.path.abspath(os.path.dirname(__file__))
-original_db = os.path.join(basedir, "venue.db")
+original_db = os.path.join(app.instance_path, "venue.db")
 writable_db = "/tmp/venue.db"
 
-# 2. Check if we are in Azure (using the Blob Connection String as our flag)
-if os.environ.get("AZURE_STORAGE_CONNECTION_STRING"):
+# Ensure instance path exists before local SQLite usage.
+os.makedirs(app.instance_path, exist_ok=True)
+
+# 2. Only switch to /tmp SQLite in non-local Azure environments.
+use_azure_tmp_sqlite = bool(os.environ.get("AZURE_STORAGE_CONNECTION_STRING")) and not is_local_env
+
+if use_azure_tmp_sqlite:
     # If in Azure, copy the DB to the writable /tmp directory if it hasn't been copied yet
     if os.path.exists(original_db) and not os.path.exists(writable_db):
         shutil.copy(original_db, writable_db)
@@ -62,12 +66,10 @@ db.init_app(app)
 ALLOWED_KNOWLEDGE_EXTENSIONS = {"pdf", "txt", "md"}
 KNOWLEDGE_UPLOAD_DIR = os.path.join(app.instance_path, "knowledge_docs")
 KNOWLEDGE_BLOB_CONTAINER = "knowledge-base"
-# Only create the local upload directory if we are NOT using Azure Blob Storage
-if not os.environ.get("AZURE_STORAGE_CONNECTION_STRING"):
-    try:
-        os.makedirs(KNOWLEDGE_UPLOAD_DIR, exist_ok=True)
-    except Exception as e:
-        print(f"Warning: Could not create local upload folder: {e}")
+try:
+    os.makedirs(KNOWLEDGE_UPLOAD_DIR, exist_ok=True)
+except Exception as e:
+    print(f"Warning: Could not create local upload folder: {e}")
 SUPPORT_BUTTON_HTML = (
     "<br><br><a href='/support/submit' class='btn btn-sm btn-primary text-white' "
     "style='border-radius: 8px;'>Open Support Ticket</a>"
