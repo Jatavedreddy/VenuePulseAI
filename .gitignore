@@ -49,3 +49,7 @@ admin.txt
 accounts.txt
 chat.txt
 document.txt
+
+/docs
+/images_proof_of_work
+generate_proof_of_work_doc.py
